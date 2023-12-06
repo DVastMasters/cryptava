@@ -1,14 +1,13 @@
 package com.dvm;
 
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.IOException;
-import java.io.InputStream;
+import java.security.KeyPair;
+import java.security.KeyPairGenerator;
 import java.security.KeyStore;
 import java.security.KeyStoreException;
 import java.security.NoSuchAlgorithmException;
-import java.security.UnrecoverableKeyException;
-import java.security.cert.CertificateException;
+import java.security.PrivateKey;
+import java.security.PublicKey;
+import java.security.SecureRandom;
 import java.util.Scanner;
 
 /**
@@ -25,18 +24,13 @@ public class Cryptava {
     private static Scanner scanner = new Scanner(System.in);
     private static int option;
 
-    /**
-     * THE STORE TO SAVE THE KEYS AND CERTIFICATES
-     */
-    private static KeyStore keyStore;
-
     public static void main(String[] args) {
         do {
             System.out.println(
                     "--- Options ---" + lineSeparator +
-                            "1. Load a key storage." + lineSeparator +
-                            "2. Generate a symmetric key." + lineSeparator +
-                            "3. Generate a key-pair (asymmetric)" + lineSeparator +
+                            "1. Generate a RSA key pair (2048 bits)." + lineSeparator +
+                            "2. Encrypt a file." + lineSeparator +
+                            "3. Decrypt a file." + lineSeparator +
                             "0. Quit.");
 
             System.out.print("Choose a option: ");
@@ -44,60 +38,51 @@ public class Cryptava {
 
             switch (option) {
                 case 1:
-                    loadKeyStore();
+                    generateKeyPair();
                     break;
                 case 2:
-                    // generateKey();
+                    encryptFile();
                     break;
                 case 3:
-                    // generateKeyPair();
+                    decryptFile();
             }
 
         } while (option != 0);
-
     }
 
-    public static void loadKeyStore() {
-        String storeFileName;
-        File storeFile;
-        String storePassword = "";
-
-        try {
-            keyStore = KeyStore.getInstance(KeyStore.getDefaultType());
-        } catch (KeyStoreException e) {
-            System.out.println("Cannot get a keyStore instance.");
-            e.printStackTrace();
-            return;
-        }
+    public static void generateKeyPair() {
+        String algorithm = "RSA";
+        int keyBitSize = 2048;
+        String keyAlias = "";
+        String keyPass = "";
 
         do {
-            System.out.print("Input a valid keyStore filename: ");
-            storeFileName = scanner.nextLine();
+            System.out.print("Input an alias to store the key: ");
+            keyAlias = scanner.nextLine();/
+        } while (keyAlias.isEmpty());
 
-            storeFile = new File(storeFileName);
-        } while (!storeFile.isFile());
+        do {
+            System.out.print("Input an password to check the key integrity: ");
+            keyPass = scanner.nextLine();
+        } while (keyPass.isEmpty());
 
-        while (true) {
-            System.out.print("Input the keyStore password: ");
-            storePassword = scanner.nextLine();
+        try {
+            KeyPairGenerator keyPairGenerator = KeyPairGenerator.getInstance(algorithm);
+            SecureRandom secureRandom = new SecureRandom();
+            keyPairGenerator.initialize(keyBitSize);
 
-            try (InputStream keyStoreData = new FileInputStream(storeFile)) {
-                keyStore.load(keyStoreData, storePassword.toCharArray());
-                break;
-            } catch (IOException e) {
-                if (e.getCause() instanceof UnrecoverableKeyException) {
-                    System.out.println("The password is invalid.");
-                } else {
-                    System.out.println("Cannot open the storeKey file.");
-                }
-                e.printStackTrace();
-            } catch (NoSuchAlgorithmException e) {
-                System.out.println("Cannot load the algorithm to verify the store.");
-                e.printStackTrace();
-            } catch (CertificateException e) {
-                System.out.println("Cannot load one or more store certificates.");
-                e.printStackTrace();
-            }
+            KeyPair keyPair = keyPairGenerator.generateKeyPair();
+            PrivateKey privateKey = keyPair.getPrivate();
+            PublicKey publicKey = keyPair.getPublic();
+
+            
+            KeyStore.PasswordProtection passwordProtection = new KeyStore.PasswordProtection(keyPass.toCharArray());
+
+            keyStore.setEntry(keyAlias, secretKeyEntry, passwordProtection);
+        } catch (NoSuchAlgorithmException e) {
+            e.printStackTrace();
+        } catch (KeyStoreException e) {
+            e.printStackTrace();
         }
 
     }
