@@ -1,13 +1,13 @@
 package com.dvm;
 
+import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
+import java.io.IOException;
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
-import java.security.KeyStore;
-import java.security.KeyStoreException;
 import java.security.NoSuchAlgorithmException;
 import java.security.PrivateKey;
 import java.security.PublicKey;
-import java.security.SecureRandom;
 import java.util.Scanner;
 
 /**
@@ -23,6 +23,13 @@ public class Cryptava {
     private static String lineSeparator = System.lineSeparator();
     private static Scanner scanner = new Scanner(System.in);
     private static int option;
+
+    private static String asymmetricAlgorithm = "RSA";
+    private static int asymmetricAlgorithmKeyBitSize = 2048;
+
+    private static String symmetricAlgorithm = "AES";
+    private static int symmetricAlgorithmKeyBitSize = 256;
+    private static String cipherMode = "CBC";
 
     public static void main(String[] args) {
         do {
@@ -41,50 +48,48 @@ public class Cryptava {
                     generateKeyPair();
                     break;
                 case 2:
-                    encryptFile();
+                    // encryptFile();
                     break;
                 case 3:
-                    decryptFile();
+                    // decryptFile();
             }
 
         } while (option != 0);
     }
 
     public static void generateKeyPair() {
-        String algorithm = "RSA";
-        int keyBitSize = 2048;
-        String keyAlias = "";
-        String keyPass = "";
-
-        do {
-            System.out.print("Input an alias to store the key: ");
-            keyAlias = scanner.nextLine();/
-        } while (keyAlias.isEmpty());
-
-        do {
-            System.out.print("Input an password to check the key integrity: ");
-            keyPass = scanner.nextLine();
-        } while (keyPass.isEmpty());
-
         try {
-            KeyPairGenerator keyPairGenerator = KeyPairGenerator.getInstance(algorithm);
-            SecureRandom secureRandom = new SecureRandom();
-            keyPairGenerator.initialize(keyBitSize);
+            KeyPairGenerator keyPairGenerator = KeyPairGenerator.getInstance(asymmetricAlgorithm);
+            keyPairGenerator.initialize(asymmetricAlgorithmKeyBitSize);
 
             KeyPair keyPair = keyPairGenerator.generateKeyPair();
             PrivateKey privateKey = keyPair.getPrivate();
             PublicKey publicKey = keyPair.getPublic();
 
-            
-            KeyStore.PasswordProtection passwordProtection = new KeyStore.PasswordProtection(keyPass.toCharArray());
+            try (FileOutputStream fOutput = new FileOutputStream("yourPublic.key")) {
+                // Encode the key in a standard format (X.509)
+                fOutput.write(publicKey.getEncoded());
+            } catch (FileNotFoundException e) {
+                e.printStackTrace();
+                System.out.println("Cannot is possible to create the yourPublic.key file.");
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
 
-            keyStore.setEntry(keyAlias, secretKeyEntry, passwordProtection);
+            try (FileOutputStream fOutput = new FileOutputStream("yourPrivate.key")) {
+                // Encode the key in a standard format (X.509)
+                fOutput.write(privateKey.getEncoded());
+            } catch (FileNotFoundException e) {
+                e.printStackTrace();
+                System.out.println("Cannot is possible to create the yourPrivate.key file.");
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
         } catch (NoSuchAlgorithmException e) {
-            e.printStackTrace();
-        } catch (KeyStoreException e) {
             e.printStackTrace();
         }
 
+        System.out.println(
+                "The public key is stored in yourPublic.key file and the private key is stored in yourPrivate.key file.");
     }
-
 }
