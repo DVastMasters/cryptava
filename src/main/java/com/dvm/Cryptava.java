@@ -47,7 +47,7 @@ public class Cryptava {
 
     private static String symmetricAlgorithm = "AES";
     private static int symmetricAlgorithmKeyBitSize = 256;
-    private static String cipherMode = "CBC";
+    private static String cipherMode = "ECB/PKCS5Padding";
 
     public static void main(String[] args) {
         do {
@@ -148,7 +148,7 @@ public class Cryptava {
 
         Cipher encryptCipher;
         try {
-            encryptCipher = Cipher.getInstance(symmetricAlgorithm);
+            encryptCipher = Cipher.getInstance(symmetricAlgorithm + "/" + cipherMode);
             encryptCipher.init(Cipher.ENCRYPT_MODE, secretKey);
             byte[] fileToEncryptBytes;
             try (FileInputStream iStream = new FileInputStream(fileToEncrypt)) {
@@ -336,7 +336,7 @@ public class Cryptava {
 
         byte[] decryptedFile = null;
         try {
-            encryptCipher = Cipher.getInstance(symmetricAlgorithm);
+            encryptCipher = Cipher.getInstance(symmetricAlgorithm + "/" + cipherMode);
             encryptCipher.init(Cipher.DECRYPT_MODE, symmetricKey);
             decryptedFile = encryptCipher.doFinal(encryptedFileBytes);
         } catch (IllegalBlockSizeException e) {
