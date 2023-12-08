@@ -6,6 +6,7 @@ import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.nio.file.Files;
+import java.security.InvalidAlgorithmParameterException;
 import java.security.InvalidKeyException;
 import java.security.KeyFactory;
 import java.security.KeyPair;
@@ -14,6 +15,7 @@ import java.security.NoSuchAlgorithmException;
 import java.security.PrivateKey;
 import java.security.PublicKey;
 import java.security.SecureRandom;
+import java.security.spec.AlgorithmParameterSpec;
 import java.security.spec.EncodedKeySpec;
 import java.security.spec.InvalidKeySpecException;
 import java.security.spec.PKCS8EncodedKeySpec;
@@ -26,6 +28,7 @@ import javax.crypto.IllegalBlockSizeException;
 import javax.crypto.KeyGenerator;
 import javax.crypto.NoSuchPaddingException;
 import javax.crypto.SecretKey;
+import javax.crypto.spec.IvParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
 
 /**
@@ -47,7 +50,7 @@ public class Cryptava {
 
     private static String symmetricAlgorithm = "AES";
     private static int symmetricAlgorithmKeyBitSize = 256;
-    private static String cipherMode = "ECB/PKCS5Padding";
+    private static String cipherMode = "CBC/PKCS5Padding";
 
     public static void main(String[] args) {
         do {
@@ -114,7 +117,7 @@ public class Cryptava {
     public static void encryptFile() {
         System.out.println(
                 "The encryption process will be: " + lineSeparator +
-                        "1. Generate a new temporary symmetric key with 256 bits to use the AES algorithm."
+                        "1. Generate a new temporary symmetric key and with 256 bits and the iv vector to use the AES algorithm."
                         + lineSeparator +
                         "2. Encrypt the file with the symmetric key." + lineSeparator +
                         "3. Encrypt the symmetric key with the public key from the message receiver." + lineSeparator +
@@ -125,18 +128,23 @@ public class Cryptava {
          */
 
         SecretKey secretKey = null;
+        AlgorithmParameterSpec parameterSpec = null;
+        byte[] randomBytesToIv = new byte[16];
         try {
             KeyGenerator keyGenerator = KeyGenerator.getInstance(symmetricAlgorithm);
             SecureRandom secureRandom = new SecureRandom(); // Ensure the randomness
             keyGenerator.init(symmetricAlgorithmKeyBitSize, secureRandom);
             secretKey = keyGenerator.generateKey();
 
+            secureRandom.nextBytes(randomBytesToIv);
+            parameterSpec = new IvParameterSpec(randomBytesToIv);
+
         } catch (NoSuchAlgorithmException e) {
             e.printStackTrace();
         }
 
         /*
-         * 2. Encrypt the file with the symmetric key.
+         * 2. Encrypt the file with the symmetric key and iv vector.
          */
         String fileNameToEncrypt;
         File fileToEncrypt;
@@ -149,7 +157,7 @@ public class Cryptava {
         Cipher encryptCipher;
         try {
             encryptCipher = Cipher.getInstance(symmetricAlgorithm + "/" + cipherMode);
-            encryptCipher.init(Cipher.ENCRYPT_MODE, secretKey);
+            encryptCipher.init(Cipher.ENCRYPT_MODE, secretKey, parameterSpec);
             byte[] fileToEncryptBytes;
             try (FileInputStream iStream = new FileInputStream(fileToEncrypt)) {
                 fileToEncryptBytes = iStream.readAllBytes();
@@ -160,24 +168,15 @@ public class Cryptava {
             try (FileOutputStream oStream = new FileOutputStream("encrypted.data")) {
                 oStream.write(fileToEncryptEncrypted);
             }
-        } catch (NoSuchAlgorithmException e) {
-            e.printStackTrace();
-        } catch (NoSuchPaddingException e) {
-            e.printStackTrace();
-        } catch (InvalidKeyException e) {
-            e.printStackTrace();
-        } catch (FileNotFoundException e) {
-            e.printStackTrace();
-        } catch (IOException e) {
-            e.printStackTrace();
-        } catch (IllegalBlockSizeException e) {
-            e.printStackTrace();
-        } catch (BadPaddingException e) {
+        } catch (NoSuchAlgorithmException | NoSuchPaddingException | InvalidKeyException
+                | IOException | IllegalBlockSizeException | BadPaddingException
+                | InvalidAlgorithmParameterException e) {
             e.printStackTrace();
         }
 
         /*
-         * 3. Encrypt the symmetric key with the public key from the message receiver.
+         * 3. Encrypt the symmetric and iv vector key with the public key from the
+         * message receiver.
          */
         String publicKeyDestFilename;
         File publicKeyDestFile;
@@ -212,25 +211,30 @@ public class Cryptava {
         // Encode the secret key in the X.509 standard.
         byte[] secretKeyBytes = secretKey.getEncoded();
         byte[] secretKeyBytesEncrypted = null;
+        byte[] ivVectorBytesEncrypted = null;
         try {
             encryptCipher = Cipher.getInstance(asymmetricAlgorithm);
             encryptCipher.init(Cipher.ENCRYPT_MODE, publicKeyDest);
             secretKeyBytesEncrypted = encryptCipher.doFinal(secretKeyBytes);
-        } catch (IllegalBlockSizeException e) {
-            e.printStackTrace();
-        } catch (BadPaddingException e) {
-            e.printStackTrace();
-        } catch (NoSuchAlgorithmException e) {
-            e.printStackTrace();
-        } catch (NoSuchPaddingException e) {
-            e.printStackTrace();
-        } catch (InvalidKeyException e) {
+
+            ivVectorBytesEncrypted = encryptCipher.doFinal(randomBytesToIv);
+        } catch (IllegalBlockSizeException | BadPaddingException | NoSuchAlgorithmException | NoSuchPaddingException
+                | InvalidKeyException e) {
             e.printStackTrace();
         }
 
         // Save the encrypted symmetric key
-        try (FileOutputStream fOutput = new FileOutputStream("tempSymmetricKey.key")) {
+        try (FileOutputStream fOutput = new FileOutputStream("symKey.key")) {
             fOutput.write(secretKeyBytesEncrypted);
+        } catch (FileNotFoundException e) {
+            e.printStackTrace();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+
+        // Save the encrypted iv vector
+        try (FileOutputStream fOutput = new FileOutputStream("ivVector.key")) {
+            fOutput.write(ivVectorBytesEncrypted);
         } catch (FileNotFoundException e) {
             e.printStackTrace();
         } catch (IOException e) {
@@ -242,7 +246,7 @@ public class Cryptava {
     public static void decryptFile() {
         System.out.println(
                 "The decryption process will be: " + lineSeparator +
-                        "1. Decrypt the temporary symmetric key using your private key." + lineSeparator +
+                        "1. Decrypt the temporary symmetric key and iv vector using your private key." + lineSeparator +
                         "2. Decrypt the file with the symmetric key.");
         /*
          * 1. Decrypt the temporary symmetric key using your private key.
@@ -277,8 +281,6 @@ public class Cryptava {
             e.printStackTrace();
         }
 
-        // DECRYPTING THE SYMMETRIC KEY
-
         String symmetricKeyFilename;
         File symmetricKeyFile;
         do {
@@ -287,11 +289,18 @@ public class Cryptava {
             symmetricKeyFile = new File(symmetricKeyFilename);
         } while (!symmetricKeyFile.isFile());
 
-        Cipher encryptCipher;
-        SecretKey symmetricKey = null;
+        // Get a Cipher instance and init it
+        Cipher encryptCipher = null;
         try {
             encryptCipher = Cipher.getInstance(asymmetricAlgorithm);
             encryptCipher.init(Cipher.DECRYPT_MODE, privateKey);
+        } catch (NoSuchAlgorithmException | NoSuchPaddingException | InvalidKeyException e) {
+            e.printStackTrace();
+        }
+
+        // Decrypt the symmetric key
+        SecretKey symmetricKey = null;
+        try {
             byte[] symmetricKeyBytes;
             try (FileInputStream iStream = new FileInputStream(symmetricKeyFile)) {
                 symmetricKeyBytes = iStream.readAllBytes();
@@ -299,19 +308,29 @@ public class Cryptava {
 
             byte[] symmetricKeyDecryptedBytes = encryptCipher.doFinal(symmetricKeyBytes);
             symmetricKey = new SecretKeySpec(symmetricKeyDecryptedBytes, 0, symmetricKeyDecryptedBytes.length, "AES");
-        } catch (NoSuchAlgorithmException e) {
+        } catch (IOException | IllegalBlockSizeException | BadPaddingException e) {
             e.printStackTrace();
-        } catch (NoSuchPaddingException e) {
-            e.printStackTrace();
-        } catch (InvalidKeyException e) {
-            e.printStackTrace();
-        } catch (FileNotFoundException e) {
-            e.printStackTrace();
-        } catch (IOException e) {
-            e.printStackTrace();
-        } catch (IllegalBlockSizeException e) {
-            e.printStackTrace();
-        } catch (BadPaddingException e) {
+        }
+
+        String ivVectorFilename;
+        File ivVectorFile;
+        do {
+            System.out.print("Input the filename with the iv vector: ");
+            ivVectorFilename = scanner.nextLine();
+            ivVectorFile = new File(ivVectorFilename);
+        } while (!ivVectorFile.isFile());
+
+        // Decrypt the iv vector
+        AlgorithmParameterSpec parameterSpec = null;
+        try {
+            byte[] ivVectorBytesEncoded;
+            try (FileInputStream iStream = new FileInputStream(ivVectorFile)) {
+                ivVectorBytesEncoded = iStream.readAllBytes();
+            }
+
+            byte[] ivVectorBytes = encryptCipher.doFinal(ivVectorBytesEncoded);
+            parameterSpec = new IvParameterSpec(ivVectorBytes);
+        } catch (IOException | IllegalBlockSizeException | BadPaddingException e) {
             e.printStackTrace();
         }
 
@@ -337,17 +356,10 @@ public class Cryptava {
         byte[] decryptedFile = null;
         try {
             encryptCipher = Cipher.getInstance(symmetricAlgorithm + "/" + cipherMode);
-            encryptCipher.init(Cipher.DECRYPT_MODE, symmetricKey);
+            encryptCipher.init(Cipher.DECRYPT_MODE, symmetricKey, parameterSpec);
             decryptedFile = encryptCipher.doFinal(encryptedFileBytes);
-        } catch (IllegalBlockSizeException e) {
-            e.printStackTrace();
-        } catch (BadPaddingException e) {
-            e.printStackTrace();
-        } catch (NoSuchAlgorithmException e) {
-            e.printStackTrace();
-        } catch (NoSuchPaddingException e) {
-            e.printStackTrace();
-        } catch (InvalidKeyException e) {
+        } catch (IllegalBlockSizeException | BadPaddingException | NoSuchAlgorithmException | NoSuchPaddingException
+                | InvalidKeyException | InvalidAlgorithmParameterException e) {
             e.printStackTrace();
         }
 
