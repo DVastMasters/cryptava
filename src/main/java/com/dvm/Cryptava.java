@@ -98,7 +98,7 @@ public class Cryptava {
             }
 
             try (FileOutputStream fOutput = new FileOutputStream("yourPrivate.key")) {
-                // Encode the key in a standard format (X.509)
+                // Encode the key in a standard format (PKCS8)
                 fOutput.write(privateKey.getEncoded());
             } catch (FileNotFoundException e) {
                 e.printStackTrace();
